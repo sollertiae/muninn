@@ -6,9 +6,22 @@
 #include <strings.h>
 
 void handle_sigbus(int sig) {
-    write(STDOUT_FILENO, "write attempt\n", 29);
+    write(STDOUT_FILENO, "write attempt\n", 14);
     _exit(1);
 }
+
+struct secretEntry {
+    char key[128];
+    char value[512];
+};
+
+struct Vault {
+    secretEntry* entries;
+    void* raw_memory;
+    size_t max_entries;
+    size_t memory_size;
+};
+
 void* secure_alloc(size_t size) {
     void* ptr = mmap(
             nullptr, 
@@ -48,24 +61,43 @@ void secure_free(void* ptr, size_t size) {
     munmap(ptr, size);
 }
 
-int main() {
+bool vault_init(Vault *vault, size_t max_entries) {
     if (sodium_init() < 0) {
         std::cerr << "libsodium init failed\n";
-        return 1;
+        return false;
     }
-    size_t size = 4096;
-    signal(SIGBUS, handle_sigbus);
+    size_t size = sizeof(secretEntry) * max_entries;
     void* ptr = secure_alloc(size);
     if (!ptr) {
         std::cerr << "allocation failed\n";
+        return false;
+    }
+    sodium_memzero(ptr, size);
+    vault->entries = static_cast<secretEntry*>(ptr);
+    vault->raw_memory = ptr;
+    vault->memory_size = size;
+    vault->max_entries = max_entries;
+    return true;
+}
+
+int main() {
+    
+    const size_t MAX_ENTRIES = 64;
+    signal(SIGBUS, handle_sigbus);
+    
+    Vault vault;
+    if (!vault_init(&vault, MAX_ENTRIES)) {
         return 1;
     }
-    char* buf = static_cast<char*>(ptr);
-    strcpy(buf, "secret data");
-    std::cout << "wrote: " << buf << "\n";
+    std::cout << "enter key: ";
+    std::cin.getline(vault.entries[0].key, 127);
+    std::cout << "enter secret: ";
+    std::cin.getline(vault.entries[0].value, 511);
+    std::cout << "key: " << vault.entries[0].key << "\n";
+    std::cout << "value: " << vault.entries[0].value << "\n";
 
-    secure_seal(ptr, size);
+    secure_seal(vault.raw_memory, vault.memory_size);
 
-    secure_free(ptr, size);
+    secure_free(vault.raw_memory, vault.memory_size);
     return 0;
 }
