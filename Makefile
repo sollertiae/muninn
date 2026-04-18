@@ -6,5 +6,8 @@ SRCS = main.cpp
 muninn: $(SRCS)
 	$(CXX) $(CXXFLAGS) -o muninn $(SRCS) $(LDFLAGS)
 
+debug: $(SRCS)
+	$(CXX) $(CXXFLAGS) -fsanitize=address,undefined -o muninn_debug $(SRCS) $(LDFLAGS)
+
 clean:
-	rm -f muninn
+	rm -f muninn muninn_debug
