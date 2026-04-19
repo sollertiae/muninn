@@ -1,0 +1,4 @@
+muninn
+muninn_debug
+*.muninn
+*.o

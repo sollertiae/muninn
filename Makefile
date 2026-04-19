@@ -1,7 +1,7 @@
 CXX = clang++
 CXXFLAGS = -Wall -Wextra -std=c++17 -I/opt/homebrew/opt/libsodium/include
 LDFLAGS = -L/opt/homebrew/opt/libsodium/lib -lsodium
-SRCS = main.cpp
+SRCS = main.cpp vault.cpp memory.cpp
 
 muninn: $(SRCS)
 	$(CXX) $(CXXFLAGS) -o muninn $(SRCS) $(LDFLAGS)
