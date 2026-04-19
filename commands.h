@@ -16,3 +16,4 @@ int cmd_add(int argc, char* argv[]);
 int cmd_get(int argc, char* argv[]);
 int cmd_delete(int argc, char* argv[]);
 int cmd_list(int argc, char* argv[]);
+int cmd_help(int argc, char* argv[]);

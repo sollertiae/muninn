@@ -1,10 +1,12 @@
 #pragma once
 #include <unistd.h>
+constexpr size_t MAX_KEY_LEN   = 128;
+constexpr size_t MAX_VALUE_LEN = 512;
 constexpr size_t MAX_ENTRIES = 64;
 
 struct secret_entry {
-    char key[128];
-    char value[512];
+    char key[MAX_KEY_LEN];
+    char value[MAX_VALUE_LEN];
     bool active;
 };
 
@@ -18,7 +20,7 @@ struct vault {
 };
 
 bool vault_init(vault *v, size_t max_entries);
-void vault_debug(vault* v);
+void vault_list(vault* v);
 bool vault_add(vault* v);
 bool vault_delete(vault* v, const char* key);
 bool vault_get(vault* v, const char* key);

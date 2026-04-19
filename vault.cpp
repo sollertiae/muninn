@@ -25,11 +25,11 @@ bool vault_init(vault *v, size_t max_entries) {
     return true;
 }
 
-void vault_debug(vault* v) {
-    std::cout << "\n--- vault print---\n";
+void vault_list(vault* v) {
+    LOG_INFO("stored keys:");
     for (size_t i = 0; i < v->max_entries; ++i) {
         if (v->entries[i].active) {
-            LOG_INFO("slot " << i << ": " << v->entries[i].key << " -> " << v->entries[i].value);
+            std::cout << "  - " << v->entries[i].key << "\n";
         }
     }
 }
@@ -38,14 +38,14 @@ bool vault_add(vault* v) {
     for (size_t i = 0; i < v->max_entries; ++i) {
         if (!v->entries[i].active) {
             std::cout << "enter key: ";
-            std::cin.getline(v->entries[i].key, 127);
-            std::cout << "enter secret: ";
-            std::cin.getline(v->entries[i].value, 511);            
+            std::cin.getline(v->entries[i].key, MAX_KEY_LEN);
+            password_get(v->entries[i].value, MAX_VALUE_LEN - 1, "enter secret: ");
             v->entries[i].active = true;
+            LOG_INFO("successfully added the key");
             return true;
         }
     }
-    std::cerr << "vault full\n";
+    LOG_ERROR("vault full");
     return false;
 }
 
@@ -54,8 +54,8 @@ bool vault_delete(vault* v, const char* key) {
         if (v->entries[i].active) {
             if (!strcmp(v->entries[i].key, key)) {
                 sodium_memzero(&v->entries[i], sizeof(v->entries[i]));
+                LOG_INFO("successfully deleted the key");
                 return true;
-
             }
         }
     }
@@ -174,7 +174,7 @@ bool vault_get(vault* v, const char* key) {
 }
 
 bool vault_start_session(vault* v, const char* path, char* password) {
-    password_get(password, 127, "Password: ");
+    password_get(password, MAX_KEY_LEN, "Password: ");
 
     if (!vault_init(v, MAX_ENTRIES))
         return false;

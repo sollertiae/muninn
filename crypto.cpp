@@ -27,7 +27,7 @@ bool key_derive(const char* password, const unsigned char* salt, unsigned char* 
 }
 
 void password_get(char* buf, size_t len, const char* prompt) {
-    LOG_INFO(prompt);
+    std::cout << prompt << "\n";
     termios old_t, new_t;
     tcgetattr(STDIN_FILENO, &old_t);
     new_t = old_t;

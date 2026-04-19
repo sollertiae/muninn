@@ -25,13 +25,15 @@ void* secure_alloc(size_t size) {
 }
 
 void secure_seal(void* ptr, size_t size) {
-    mprotect(ptr, size, PROT_READ);
-    LOG_INFO("memory is now read-only\n");
+    if (mprotect(ptr, size, PROT_READ) < 0) {
+        LOG_ERROR("mprotect failed");
+    }
 }
 
 void secure_unseal(void* ptr, size_t size) {
-    mprotect(ptr, size, PROT_READ | PROT_WRITE);
-    LOG_INFO("memory is now read-write");
+    if (mprotect(ptr, size, PROT_READ | PROT_WRITE) < 0) {
+        LOG_ERROR("mprotect failed");
+    }
 }
 
 void secure_free(void* ptr, size_t size) {
