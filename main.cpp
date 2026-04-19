@@ -1,13 +1,14 @@
+#include <fstream>
 #include <iostream>
 #include <sys/mman.h>
-#include <unistd.h>
 #include <strings.h>
 #include <sodium.h>
-#include <fstream>
+#include <sys/ptrace.h>
+#include <unistd.h>
 #include "commands.h"
 #include "memory.h"
+#include "log.h"
 #include "vault.h"
-#include <sys/ptrace.h>
 
 int main(int argc, char* argv[]) {
     ptrace(PT_DENY_ATTACH, 0, 0, 0);
@@ -18,5 +19,6 @@ int main(int argc, char* argv[]) {
     if (commands.count(argv[1])) {
         return commands[argv[1]].fn(argc, argv);
     }
-    return 0;
+    LOG_ERROR("unknown command: " << argv[1] << ". use help to display commands.");
+    return 1;
 }
