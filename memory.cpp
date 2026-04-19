@@ -2,6 +2,7 @@
 #include <sys/mman.h>
 #include <sodium.h>
 #include "memory.h"
+#include "log.h"
 
 void* secure_alloc(size_t size) {
     void* ptr = mmap(
@@ -16,7 +17,7 @@ void* secure_alloc(size_t size) {
         return nullptr;
     }
     if (mlock(ptr, size) != 0) {
-        std::cerr << "mlock failed\n";
+        LOG_ERROR("mlock failed");
         munmap(ptr, size);
         return nullptr;
     }
@@ -25,12 +26,12 @@ void* secure_alloc(size_t size) {
 
 void secure_seal(void* ptr, size_t size) {
     mprotect(ptr, size, PROT_READ);
-    std::cout << "memory is now read-only\n";
+    LOG_INFO("memory is now read-only\n");
 }
 
 void secure_unseal(void* ptr, size_t size) {
     mprotect(ptr, size, PROT_READ | PROT_WRITE);
-    std::cout << "memory is now read-write\n";   
+    LOG_INFO("memory is now read-write");
 }
 
 void secure_free(void* ptr, size_t size) {

@@ -30,6 +30,7 @@ brew install libsodium
 - [x] Memory sealing (mprotect)
 - [x] Secure erasure
 - [x] Argon2id key derivation
-- [ ] AES-256-GCM encrypted persistence
-- [ ] Hidden password input
+- [x] AES-256-GCM encrypted persistence
+- [x] Hidden password input
 - [ ] CLI interface
+- [ ] Review memory release

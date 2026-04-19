@@ -1,18 +1,20 @@
 #include <fstream>
 #include <iostream>
 #include <sodium.h>
+#include "crypto.h"
 #include "memory.h"
+#include "log.h"
 #include "vault.h"
 
 bool vault_init(vault *v, size_t max_entries) {
     if (sodium_init() < 0) {
-        std::cerr << "libsodium init failed\n";
+        LOG_ERROR("libsodium init failed");
         return false;
     }
     size_t size = sizeof(secret_entry) * max_entries;
     void* ptr = secure_alloc(size);
     if (!ptr) {
-        std::cerr << "allocation failed\n";
+        LOG_ERROR("allocation failed");
         return false;
     }
     sodium_memzero(ptr, size);
@@ -27,7 +29,7 @@ void vault_debug(vault* v) {
     std::cout << "\n--- vault print---\n";
     for (size_t i = 0; i < v->max_entries; ++i) {
         if (v->entries[i].active) {
-            std::cout << "slot " << i << ": " << v->entries[i].key << " -> " << v->entries[i].value << "\n";
+            LOG_INFO("slot " << i << ": " << v->entries[i].key << " -> " << v->entries[i].value);
         }
     }
 }
@@ -90,7 +92,7 @@ bool vault_save(
     );
     std::ofstream file(path, std::ios::binary);
     if (!file) {
-        std::cerr << "failed to open file\n";
+        LOG_ERROR("failed to open file");
         return false;
     }
     file.write(reinterpret_cast<const char*>(salt), crypto_pwhash_SALTBYTES);
@@ -107,30 +109,33 @@ bool vault_open(
 ) {
     std::ifstream file(path, std::ios::binary);
     if (!file) {
-        std::cerr << "failed to open file\n";
+        LOG_ERROR("failed to open file");
         return false;
     }
+
     file.seekg(0, std::ios::end);
     size_t file_size = file.tellg();
     file.seekg(0, std::ios::beg);
-    unsigned char salt[crypto_pwhash_SALTBYTES];
-    file.read(reinterpret_cast<char*>(salt), crypto_pwhash_SALTBYTES);
-    unsigned char key[crypto_box_SEEDBYTES];
+
+    file.read(reinterpret_cast<char*>(v->salt), crypto_pwhash_SALTBYTES);
+
     if (crypto_pwhash(
-        key, 
+        v->key, 
         crypto_box_SEEDBYTES, 
         password, 
         strlen(password), 
-        salt, 
+        v->salt, 
         crypto_pwhash_OPSLIMIT_INTERACTIVE,
         crypto_pwhash_MEMLIMIT_INTERACTIVE,
         crypto_pwhash_ALG_DEFAULT
     ) < 0) {
-        std::cout << "error deriving key" << "\n";
+        LOG_ERROR("error deriving key");
         return false;
     }
+
     unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
     file.read(reinterpret_cast<char*>(nonce), crypto_aead_aes256gcm_NPUBBYTES);
+
     size_t encrypted_data_len = file_size - crypto_pwhash_SALTBYTES - crypto_aead_aes256gcm_NPUBBYTES;
     std::vector<unsigned char> ciphertext(encrypted_data_len);
     file.read(reinterpret_cast<char*>(ciphertext.data()), encrypted_data_len);
@@ -142,21 +147,41 @@ bool vault_open(
         ciphertext.data(), encrypted_data_len,
         nullptr, 0,
         nonce, 
-        key
+        v->key
     ) != 0) {
-        std::cerr << "decryption failed - wrong password or tampered file\n";
+        LOG_ERROR("decryption failed - wrong password or tampered file");
         return false;
     }
     return true;
 }
 
-const char* vault_get(vault* v, const char* key) {
+bool vault_get(vault* v, const char* key) {
     for (size_t i = 0; i < v->max_entries; ++i) {
         if (v->entries[i].active) {
             if (!strcmp(v->entries[i].key, key)) {
-                return v->entries[i].value;
+                FILE* pipe = popen("pbcopy", "w");
+                if (pipe) {
+                    fwrite(v->entries[i].value, 1, strlen(v->entries[i].value), pipe);
+                    pclose(pipe);
+                    LOG_INFO("key copied to clipboard");
+                    return true;
+                }
             }
         }
     }
-    return nullptr;
+    LOG_ERROR("key not found: " << key);
+    return false;
+}
+
+bool vault_start_session(vault* v, const char* path, char* password) {
+    password_get(password, 127, "Password: ");
+
+    if (!vault_init(v, MAX_ENTRIES))
+        return false;
+    if (!vault_open(v, password, path)) {
+        LOG_ERROR("failed to open vault: " << path);
+        vault_destroy(v);
+        return false;
+    }
+    return true;
 }
