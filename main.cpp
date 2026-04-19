@@ -4,6 +4,20 @@
 #include <unistd.h>
 #include <sodium.h>
 #include <strings.h>
+#include <functional>
+#include <map>
+#include <fstream>
+
+using command_fn = std::function<int(int argc, char* argv[])>;
+
+// std::map<std::string, command_fn> commands = {
+//     {"create", cmd_create},
+//     {"open",   cmd_open},
+//     {"add",    cmd_add},
+//     {"get",    cmd_get},
+//     {"delete", cmd_delete},
+//     {"list",   cmd_list}
+// };
 
 void handle_sigbus(int sig) {
     write(STDOUT_FILENO, "write attempt\n", 14);
@@ -108,6 +122,7 @@ bool vault_delete(vault* v, const char* key) {
             if (!strcmp(v->entries[i].key, key)) {
                 sodium_memzero(&v->entries[i], sizeof(v->entries[i]));
                 return true;
+
             }
         }
     }
@@ -126,16 +141,97 @@ const char* vault_get(vault* v, const char* key) {
 }
 
 void vault_destroy(vault* v) {
-    secure_unseal(v->raw_memory, v->memory_size);
     secure_free(v->raw_memory, v->memory_size);
-    munmap(v->raw_memory, v->memory_size);
     v->raw_memory = nullptr;
     v->entries = nullptr;
     v->memory_size = 0;
     v->max_entries = 0;
 }
 
-int main() {
+bool vault_save(
+    vault* v,
+    const unsigned char* key,
+    const unsigned char* salt,
+    const char* path
+) {
+    unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
+    randombytes_buf(nonce, sizeof(nonce));
+
+    unsigned long long ciphertext_len;
+    std::vector<unsigned char> ciphertext(v->memory_size + crypto_aead_aes256gcm_ABYTES);
+    crypto_aead_aes256gcm_encrypt(
+        ciphertext.data(), 
+        &ciphertext_len,
+        reinterpret_cast<const unsigned char*>(v->entries), v->memory_size,
+        nullptr, 
+        0,
+        nullptr,
+        nonce, key
+    );
+    std::ofstream file(path, std::ios::binary);
+    if (!file) {
+        std::cerr << "failed to open file\n";
+        return false;
+    }
+    file.write(reinterpret_cast<const char*>(salt), crypto_pwhash_SALTBYTES);
+    file.write(reinterpret_cast<const char*>(nonce), crypto_aead_aes256gcm_NPUBBYTES);
+    file.write(reinterpret_cast<const char*>(ciphertext.data()), ciphertext_len);
+    file.close();
+    return true;
+}
+
+bool vault_open(vault* v, const char* password, const char* path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        std::cerr << "failed to open file\n";
+        return false;
+    }
+    file.seekg(0, std::ios::end);
+    size_t file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    unsigned char salt[crypto_pwhash_SALTBYTES];
+    file.read(reinterpret_cast<char*>(salt), crypto_pwhash_SALTBYTES);
+    unsigned char key[crypto_box_SEEDBYTES];
+    if (crypto_pwhash(
+        key, 
+        crypto_box_SEEDBYTES, 
+        password, 
+        strlen(password), 
+        salt, 
+        crypto_pwhash_OPSLIMIT_INTERACTIVE,
+        crypto_pwhash_MEMLIMIT_INTERACTIVE,
+        crypto_pwhash_ALG_DEFAULT
+    ) < 0) {
+        std::cout << "error deriving key" << "\n";
+        return false;
+    }
+    unsigned char nonce[crypto_aead_aes256gcm_NPUBBYTES];
+    file.read(reinterpret_cast<char*>(nonce), crypto_aead_aes256gcm_NPUBBYTES);
+    size_t encrypted_data_len = file_size - crypto_pwhash_SALTBYTES - crypto_aead_aes256gcm_NPUBBYTES;
+    std::vector<unsigned char> ciphertext(encrypted_data_len);
+    file.read(reinterpret_cast<char*>(ciphertext.data()), encrypted_data_len);
+
+    unsigned long long decrypted_len;
+    if (crypto_aead_aes256gcm_decrypt(
+        reinterpret_cast<unsigned char*>(v->entries), &decrypted_len,
+        nullptr,
+        ciphertext.data(), encrypted_data_len,
+        nullptr, 0,
+        nonce, 
+        key
+    ) != 0) {
+        std::cerr << "decryption failed - wrong password or tampered file\n";
+        return false;
+    }
+    return true;
+}
+
+int main(int argc, char* argv[]) {
+    // if (argc < 2) {
+    //     std::cerr << "usage: muninn <command> [options]. use help to display commands.\n";
+    //     return 1;
+    // }
+
     unsigned char salt[crypto_pwhash_SALTBYTES];
     randombytes_buf(salt, sizeof(salt));
 
@@ -151,25 +247,24 @@ int main() {
     unsigned char* key = secure_buf + 128;
     std::cout << "Password: ";
     std::cin.getline(password, 127);
-    if (crypto_pwhash(
-        key, 
-        crypto_box_SEEDBYTES, 
-        password, 
-        strlen(password), 
-        salt, 
-        crypto_pwhash_OPSLIMIT_INTERACTIVE,
-        crypto_pwhash_MEMLIMIT_INTERACTIVE,
-        crypto_pwhash_ALG_DEFAULT
-    ) < 0) {
-        std::cout << "error deriving key" << "\n";
-        return 1;
-    }
-    vault_add(&v);
+    // if (crypto_pwhash(
+    //     key, 
+    //     crypto_box_SEEDBYTES, 
+    //     password, 
+    //     strlen(password), 
+    //     salt, 
+    //     crypto_pwhash_OPSLIMIT_INTERACTIVE,
+    //     crypto_pwhash_MEMLIMIT_INTERACTIVE,
+    //     crypto_pwhash_ALG_DEFAULT
+    // ) < 0) {
+    //     std::cout << "error deriving key" << "\n";
+    //     return 1;
+    // }
+    vault_open(&v, password, "firstvault");
+    // vault_add(&v);
     vault_debug(&v);
     vault_get(&v, "github");
-    vault_delete(&v, "github");
-    vault_debug(&v);
-    vault_destroy(&v);
-    vault_debug(&v);
+    // vault_debug(&v);
+    // vault_save(&v, key, salt, "firstvault");
     return 0;
 }
