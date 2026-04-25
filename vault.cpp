@@ -1,6 +1,8 @@
 #include <fstream>
 #include <iostream>
 #include <sodium.h>
+#include <cstring>
+#include <vector>
 #include "crypto.h"
 #include "memory.h"
 #include "log.h"
@@ -159,7 +161,13 @@ bool vault_get(vault* v, const char* key) {
     for (size_t i = 0; i < v->max_entries; ++i) {
         if (v->entries[i].active) {
             if (!strcmp(v->entries[i].key, key)) {
-                FILE* pipe = popen("pbcopy", "w");
+                
+                #ifdef __APPLE__
+                    FILE* pipe = popen("pbcopy", "w");
+                #else
+                    FILE* pipe = popen("xclip -selection clipboard", "w");
+                #endif
+
                 if (pipe) {
                     fwrite(v->entries[i].value, 1, strlen(v->entries[i].value), pipe);
                     pclose(pipe);

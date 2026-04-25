@@ -1,3 +1,4 @@
+#include <cstring>
 #include <iostream>
 #include <sodium.h>
 #include <termios.h>
