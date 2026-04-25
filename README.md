@@ -4,6 +4,10 @@ A command-line secrets manager written in C++ with a focus on memory security an
 
 Secrets are stored in mlock'd memory pages that cannot be swapped to disk, encrypted at rest using AES-256-GCM with Argon2id key derivation, and securely erased from memory when the program exits.
 
+# Security Model
+
+Muninn stores secrets in memory pages locked with `mlock`, preventing them from being swapped to disk. Pages are sealed with `mprotect` when not actively accessed, and all sensitive memory is zeroed with `sodium_memzero` before release. It uses Argon2id to derive a cryptographic key at runtime, which is used with AES-256-GCM for authenticated encryption of the vault file. The process hardens itself against inspection by preventing ptrace attachment.
+
 ## Building
 
 ```bash
@@ -15,10 +19,16 @@ make clean
 ## Dependencies
 
 - libsodium
+- xclip (Linux)
 
+**macOS:**
 ```bash
-brew install libsodium     # macOS
-apt install libsodium-dev  # Linux
+brew install libsodium 
+```
+
+**Linux:**
+```bash
+sudo apt install libsodium-dev xclip
 ```
 
 ## Usage
@@ -41,5 +51,5 @@ apt install libsodium-dev  # Linux
 - [x] AES-256-GCM encrypted persistence
 - [x] Hidden password input
 - [X] CLI interface
-- [ ] Review memory release
+- [X] Review memory release
 - [ ] Clear clipboard
